@@ -6,7 +6,6 @@ exports.handler = async function(event, context) {
     try {
         const payload = JSON.parse(event.body);
         
-        // 1. 讀取你在 Netlify 設定好的環境變數
         const MerchantID = process.env.ECPAY_MERCHANT_ID;
         const HashKey = process.env.ECPAY_HASH_KEY;
         const HashIV = process.env.ECPAY_HASH_IV;
@@ -15,19 +14,32 @@ exports.handler = async function(event, context) {
             throw new Error("伺服器遺失綠界金鑰，請檢查 Netlify 環境變數設定！");
         }
 
+        // --- 🛠️ 關鍵修復：手動組合台灣時間，強制補 0 確保符合 YYYY/MM/DD HH:mm:ss ---
+        const now = new Date();
+        const tzOffset = 8 * 60 * 60 * 1000; // 台灣時間 UTC+8
+        const twTime = new Date(now.getTime() + tzOffset);
+        
+        const yyyy = twTime.getUTCFullYear();
+        const mm = String(twTime.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(twTime.getUTCDate()).padStart(2, '0');
+        const hh = String(twTime.getUTCHours()).padStart(2, '0');
+        const min = String(twTime.getUTCMinutes()).padStart(2, '0');
+        const ss = String(twTime.getUTCSeconds()).padStart(2, '0');
+        const formattedDate = `${yyyy}/${mm}/${dd} ${hh}:${min}:${ss}`;
+
         // 2. 準備綠界需要的必填參數
         const baseParams = {
             MerchantID: MerchantID,
             MerchantTradeNo: payload.MerchantTradeNo, 
-            MerchantTradeDate: new Date().toLocaleString('zh-TW', { hour12: false, timeZone: 'Asia/Taipei' }).replace(/\//g, '/'),
+            MerchantTradeDate: formattedDate, // <--- 改用這個保證不會錯的時間格式
             PaymentType: 'aio',
             TotalAmount: payload.TotalAmount.toString(),
             TradeDesc: '波波電玩商城訂單',
             ItemName: payload.ItemName,
-            ReturnURL: 'https://www.ecpay.com.tw/receive.php', // 測試環境用這組即可
+            ReturnURL: 'https://www.ecpay.com.tw/receive.php',
             ChoosePayment: 'ALL',
             EncryptType: '1',
-            OrderResultURL: payload.ClientBackURL, // 刷卡完跳轉回你的官網
+            OrderResultURL: payload.ClientBackURL, 
             NeedExtraPaidInfo: 'N',
             DeviceSource: 'P',
             InvoiceMark: 'N',
@@ -37,7 +49,6 @@ exports.handler = async function(event, context) {
         const sortedKeys = Object.keys(baseParams).sort();
         let rawStr = `HashKey=${HashKey}&` + sortedKeys.map(key => `${key}=${baseParams[key]}`).join('&') + `&HashIV=${HashIV}`;
         
-        // URL 編碼並轉換 (符合綠界嚴格規範)
         rawStr = encodeURIComponent(rawStr).replace(/%20/g, '+').toLowerCase()
             .replace(/%2d/g, '-')
             .replace(/%5f/g, '_')
@@ -65,10 +76,9 @@ exports.handler = async function(event, context) {
             </html>
         `;
 
-        // 5. 將 HTML 回傳給前端
         return {
             statusCode: 200,
-            headers: { "Content-Type": "text/html; charset=utf-8" }, // 這次是回傳 HTML
+            headers: { "Content-Type": "text/html; charset=utf-8" },
             body: htmlForm
         };
 
