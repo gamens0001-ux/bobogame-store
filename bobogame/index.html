@@ -623,11 +623,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(ecpayPayload)
                 })
-                .then(res => res.json())
-                .then(data => {
-                    console.log("後端回傳的結果：", data);
-                    alert("後端回覆：" + data.message + "\n訂單金額：" + data.total);
-                    saveOrderAndHome(newOrder);
+                .then(res => res.text()) // 【關鍵改變】把 .json() 改成 .text()
+                .then(html => {
+                    // 【關鍵改變】直接把網頁內容替換成後端傳來的自動跳轉表單
+                    document.open();
+                    document.write(html);
+                    document.close();
+                    
+                    saveOrderAndHome(newOrder); // 背景先存檔購物車資訊
                 })
                 .catch(err => {
                     console.error("呼叫 API 失敗：", err);
